@@ -1,0 +1,3 @@
+[submodule "src/modules/lora/basicmac"]
+	path = src/modules/lora/basicmac
+	url = https://github.com/povik/basicmac.git
