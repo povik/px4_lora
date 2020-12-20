@@ -6,3 +6,7 @@ For implementation of LoRaWAN, the code relies on [LacunaSpace/basicmac](https:/
 
 The code is developed and tested with [this PX4 tree](https://github.com/ThunderFly-aerospace/PX4Firmware/tree/povik/fik-6-lora).
 
+## Bugs & Known Limitations
+
+ * Currently there is blanket wait after each command, as the BUSY signal is not connected to the autopilot processor. This is most likely what makes the LoRaWAN stack miss its RX windows, and prevents it from catching downlink packets.
+
