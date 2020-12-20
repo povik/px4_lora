@@ -133,12 +133,27 @@ int thread_poll(int argc, char **argv)
     }
 }
 
+int packet_counter;
+int ordinary_dr;
+int extraordinary_dr;
+int extraordinary_dr_period;
+
 void check_message() {
     if (sem_trywait(&sem_message) == 0) {
-        if (!(LMIC.opmode & (OP_JOINING|OP_TXRXPEND)))
+        if (!(LMIC.opmode & (OP_JOINING|OP_TXRXPEND))) {
+            packet_counter++;
+
+            if ((extraordinary_dr_period > 0) && \
+                    (extraordinary_dr > 0) && \
+                    (packet_counter % extraordinary_dr_period == 0))
+                LMIC_setDrTxpow(extraordinary_dr, KEEP_TXPOWADJ);
+            else
+                LMIC_setDrTxpow(ordinary_dr, KEEP_TXPOWADJ);
+
             LMIC_setTxData2(1, outgoing.data, outgoing.len, 0);
-        else
+        } else {
             printf("Dropping message. Bad mode.\n");
+        }
         sem_post(&sem_message_done);
     }
 }
@@ -164,8 +179,6 @@ enum {
     EU_DR_SF7_BW250 = 6,
     EU_DR_FSK = 7,
 };
-
-int DR;
 
 extern "C"
 int thread(int argc, char **argv)
@@ -202,7 +215,7 @@ int thread(int argc, char **argv)
     LMIC.dn2Dr = EU_DR_SF9;
 
     // Set data rate for uplink
-    LMIC_setDrTxpow(DR, KEEP_TXPOWADJ);
+    LMIC_setDrTxpow(ordinary_dr, KEEP_TXPOWADJ);
 
     // Disable link check validation
     LMIC_setLinkCheckMode(0);
@@ -244,7 +257,7 @@ static bool parse_hex(const char *argname, const char *s, uint8_t *t, int hexlen
 }
 
 static void usage() {
-    fprintf(stderr, "usage: lora -n NET_SESS_KEY -a APP_SESS_KEY -d DEV_ADDR -s SF\n");
+    fprintf(stderr, "usage: lora -n NET_SESS_KEY -a APP_SESS_KEY -d DEV_ADDR -s SF -x HIGHER_SF -p HIGHER_SF_PERIOD\n");
 }
 
 extern "C"
@@ -255,7 +268,12 @@ lora_main(int argc, char *argv[])
     int optind = 1;
     const char* optarg;
     int setargs = 0;
-    while ((opt = px4_getopt(argc, argv, "n:a:d:s:", &optind, &optarg)) != EOF) {
+
+    packet_counter = 0;
+    extraordinary_dr = -1;
+    extraordinary_dr_period = -1;
+
+    while ((opt = px4_getopt(argc, argv, "n:a:d:s:x:p:", &optind, &optarg)) != EOF) {
         switch (opt) {
         case 'n':
             if (!parse_hex("network session key", optarg, NWKSKEY, sizeof(NWKSKEY)*2))
@@ -286,9 +304,26 @@ lora_main(int argc, char *argv[])
                     usage();
                     return 1;
                 }
-                DR = EU_DR_SF12 + (12 - m);
+                ordinary_dr = EU_DR_SF12 + (12 - m);
             };
             setargs |= 0b1000;
+            break;
+        case 'x':
+            {
+                int m = atoi(optarg);
+                if (m < 6 || m > 12) {
+                    usage();
+                    return 1;
+                }
+                extraordinary_dr = EU_DR_SF12 + (12 - m);
+            };
+            break;
+        case 'p':
+            extraordinary_dr_period = atoi(optarg);
+            if (extraordinary_dr_period < 1) {
+                usage();
+                return 1;
+            }
             break;
         default:
             usage();
